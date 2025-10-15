@@ -164,6 +164,7 @@ app.use(async (req, res) => {
   }
 
   forwardHeaders['user-agent'] = sanitizeUserAgent(req.headers['user-agent']);
+  console.log('authToken is >>>', authToken);
   forwardHeaders['x-api-key'] = authToken;
   forwardHeaders['accept-encoding'] = 'identity';
 
@@ -185,6 +186,7 @@ app.use(async (req, res) => {
     }
 
     const upstream = await fetchImpl(targetUrl, requestInit);
+    console.log('upstream is >>>', upstream);
 
     res.status(upstream.status);
 
