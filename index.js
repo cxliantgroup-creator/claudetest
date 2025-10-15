@@ -102,7 +102,7 @@ const pipeWebStream = (webStream, writable) => {
   read();
 };
 
-app.all('*', async (req, res) => {
+app.use(async (req, res) => {
   let config;
   try {
     config = ensureConfig();
