@@ -165,7 +165,7 @@ app.use(async (req, res) => {
 
   forwardHeaders['user-agent'] = sanitizeUserAgent(req.headers['user-agent']);
   console.log('authToken is >>>', authToken);
-  forwardHeaders['x-api-key'] = authToken;
+  forwardHeaders['x-api-key'] = `Bearer ${authToken}`;
   forwardHeaders['accept-encoding'] = 'identity';
 
   const requestInit = {
