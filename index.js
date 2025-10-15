@@ -27,14 +27,14 @@ const sanitizeUserAgent = (ua) => {
 };
 
 const ensureConfig = () => {
-  const baseUrl = process.env.ANTHROPIC_BASE_URL;
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com';
   const authToken = process.env.ANTHROPIC_AUTH_TOKEN;
 
-  if (!baseUrl || !authToken) {
-    throw new Error('Missing ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN environment variables.');
+  if (!baseUrl) {
+    throw new Error('Missing ANTHROPIC_BASE_URL environment variable.');
   }
 
-  return { baseUrl, authToken };
+  return { baseUrl, defaultAuthToken: authToken };
 };
 
 let cachedFetch;
@@ -102,6 +102,13 @@ const pipeWebStream = (webStream, writable) => {
   read();
 };
 
+const firstHeaderValue = (value) => {
+  if (Array.isArray(value)) {
+    return value.find(Boolean);
+  }
+  return value;
+};
+
 app.use(async (req, res) => {
   let config;
   try {
@@ -112,6 +119,28 @@ app.use(async (req, res) => {
   }
 
   const targetUrl = new URL(req.originalUrl, config.baseUrl);
+  console.log('req.headers is >>>', req.headers);
+
+  const providedApiKey = firstHeaderValue(req.headers['x-api-key']);
+  const providedAuthorization = firstHeaderValue(req.headers.authorization);
+
+  let authToken = typeof providedApiKey === 'string' ? providedApiKey.trim() : undefined;
+
+  if (!authToken && typeof providedAuthorization === 'string') {
+    const match = providedAuthorization.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      authToken = match[1].trim();
+    }
+  }
+
+  if (!authToken) {
+    authToken = config.defaultAuthToken;
+  }
+
+  if (!authToken) {
+    res.status(401).json({ error: 'Missing Anthropic API token.' });
+    return;
+  }
 
   const forwardHeaders = {};
   for (const [key, value] of Object.entries(req.headers)) {
@@ -120,7 +149,12 @@ app.use(async (req, res) => {
     if (lowerKey === 'host' || lowerKey === 'connection' || lowerKey === 'content-length') {
       continue;
     }
-    if (lowerKey === 'authorization' || lowerKey.startsWith('x-forwarded-') || lowerKey === 'via') {
+    if (
+      lowerKey === 'authorization' ||
+      lowerKey === 'x-api-key' ||
+      lowerKey.startsWith('x-forwarded-') ||
+      lowerKey === 'via'
+    ) {
       continue;
     }
     if (lowerKey === 'user-agent') {
@@ -130,7 +164,7 @@ app.use(async (req, res) => {
   }
 
   forwardHeaders['user-agent'] = sanitizeUserAgent(req.headers['user-agent']);
-  forwardHeaders['x-api-key'] = config.authToken;
+  forwardHeaders['x-api-key'] = authToken;
   forwardHeaders['accept-encoding'] = 'identity';
 
   const requestInit = {
